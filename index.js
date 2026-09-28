@@ -1,43 +1,81 @@
 const express = require('express');
-const axios = require('axios');
 const cors = require('cors');
+const axios = require('axios');
 const app = express();
+
 app.use(cors());
 app.use(express.json());
-const CONSUMER_KEY = "7dV44d1v1kG6uXyQpLmN2bVcD8eFgHjK";
-const CONSUMER_SECRET = "PUT_YOUR_SECRET_HERE";
-const SHORTCODE = "174379";
-const PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919";
-async function getToken() {
-  const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
-  const res = await axios.get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials', { headers: { Authorization: `Basic ${auth}` } });
-  return res.data.access_token;
-}
-app.get('/', (req, res) => res.send('STARLIFE M-Pesa Backend Running'));
-app.post('/stkpush', async (req, res) => {
+
+app.get('/', (req, res) => {
+  res.send('STARLIFE M-Pesa Backend Running ✅ - Ready!');
+});
+
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'STARLIFE Backend LIVE!',
+    hasPasskey: !!process.env.MPESA_PASSKEY,
+    hasConsumerKey: !!process.env.MPESA_CONSUMER_KEY,
+    time: new Date().toISOString()
+  });
+});
+
+app.get('/api/callback', (req, res) => {
+  res.json({ message: 'Callback URL is working!' });
+});
+
+app.post('/api/stkpush', async (req, res) => {
   try {
     const { phone, amount } = req.body;
-    let formattedPhone = phone.startsWith('0') ? '254' + phone.slice(1) : phone;
-    const token = await getToken();
+    let cleanPhone = phone.replace(/\D/g,'');
+    if(cleanPhone.startsWith('0')) cleanPhone = '254' + cleanPhone.slice(1);
+    if(cleanPhone.startsWith('7')) cleanPhone = '254' + cleanPhone;
+
+    const shortCode = process.env.MPESA_SHORTCODE || '174379';
+    const passkey = process.env.MPESA_PASSKEY;
+    const consumerKey = process.env.MPESA_CONSUMER_KEY;
+    const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+    const env = process.env.MPESA_ENV || 'sandbox';
+
+    if(!passkey) return res.status(400).json({ error: 'Missing MPESA_PASSKEY in Vercel' });
+    if(!consumerKey) return res.status(400).json({ error: 'Missing MPESA_CONSUMER_KEY in Vercel' });
+    if(!consumerSecret) return res.status(400).json({ error: 'Missing MPESA_CONSUMER_SECRET in Vercel' });
+
+    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+    const tokenUrl = env === 'production' ? 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials' : 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+    
+    const tokenRes = await axios.get(tokenUrl, { headers: { Authorization: `Basic ${auth}` } });
+    const token = tokenRes.data.access_token;
+
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0,14);
-    const password = Buffer.from(`${SHORTCODE}${PASSKEY}${timestamp}`).toString('base64');
-    const payload = {
-      BusinessShortCode: SHORTCODE,
+    const password = Buffer.from(`${shortCode}${passkey}${timestamp}`).toString('base64');
+    
+    const stkUrl = env === 'production' ? 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest' : 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
+
+    const stkRes = await axios.post(stkUrl, {
+      BusinessShortCode: shortCode,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: "CustomerPayBillOnline",
+      TransactionType: 'CustomerPayBillOnline',
       Amount: amount || 1,
-      PartyA: formattedPhone,
-      PartyB: SHORTCODE,
-      PhoneNumber: formattedPhone,
-      CallBackURL: "https://starlife-mpesa-backend.onrender.com/callback",
-      AccountReference: "STARLIFE",
-      TransactionDesc: "Starlife Ticket"
-    };
-    const response = await axios.post('https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest', payload, { headers: { Authorization: `Bearer ${token}` } });
-    res.json(response.data);
-  } catch (e) { res.status(500).json(e.response?.data || { error: e.message }); }
+      PartyA: cleanPhone,
+      PartyB: shortCode,
+      PhoneNumber: cleanPhone,
+      CallBackURL: 'https://starlife-mpesa-backend.vercel.app/api/callback',
+      AccountReference: 'STARLIFE',
+      TransactionDesc: 'Starlife Activation'
+    }, { headers: { Authorization: `Bearer ${token}` } });
+
+    res.json(stkRes.data);
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: err.message, details: err.response?.data });
+  }
 });
-app.post('/callback', (req, res) => { console.log(req.body); res.json({ ResultCode: 0, ResultDesc: "OK" }); });
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Running on ${PORT}`));
+
+app.post('/api/callback', (req, res) => {
+  console.log('CALLBACK:', JSON.stringify(req.body));
+  res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+});
+
+module.exports = app;
