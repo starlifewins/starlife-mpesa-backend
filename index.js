@@ -1,49 +1,24 @@
-const express = require('express');
-const axios = require('axios');
-const app = express();
+const express=require('express');
+const axios=require('axios');
+const app=express();
 app.use(express.json());
-
-const SHORTCODE = "7148888";
-const BASE_URL = "https://starlife-mpesa-backend.vercel.app";
-const CONFIRMATION_URL = BASE_URL + "/api/confirmation";
-const VALIDATION_URL = BASE_URL + "/api/validation";
-const DARAJA_URL = "https://api.safaricom.co.ke";
-
-const CONSUMER_KEY = "6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we";
-const CONSUMER_SECRET = "7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF";
-
-app.get('/', (req, res) => {
-  res.send('STARLIFE M-Pesa Backend Running - Ready!');
+const SC="7148888";
+const B="https://starlife-mpesa-backend.vercel.app";
+const C=B+"/api/confirmation";
+const V=B+"/api/validation";
+const D="https://api.safaricom.co.ke";
+const K="6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we";
+const S="7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF";
+app.get('/',(req,res)=>{res.send('STARLIFE M-Pesa Backend Running - Ready!');});
+app.post('/api/validation',(req,res)=>{res.json({ResultCode:0,ResultDesc:"Accepted"});});
+app.post('/api/confirmation',(req,res)=>{console.log(req.body);res.json({ResultCode:0,ResultDesc:"Success"});});
+app.get('/api/register',async(req,res)=>{
+try{
+const a=Buffer.from(K+":"+S).toString('base64');
+const t=await axios.get(D+"/oauth/v1/generate?grant_type=client_credentials",{headers:{Authorization:"Basic "+a}});
+const k=t.data.access_token;
+const q=await axios.post(D+"/mpesa/c2b/v1/registerurl",{ShortCode:SC,ResponseType:"Completed",ConfirmationURL:C,ValidationURL:V},{headers:{Authorization:"Bearer "+k}});
+res.json(q.data);
+}catch(e){res.status(500).json({error:e.response?.data||e.message});}
 });
-
-app.post('/api/validation', (req, res) => {
-  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
-});
-
-app.post('/api/confirmation', (req, res) => {
-  console.log(req.body);
-  res.json({ ResultCode: 0, ResultDesc: "Success" });
-});
-
-app.get('/api/register', async (req, res) => {
-  try {
-    const auth = Buffer.from(CONSUMER_KEY + ":" + CONSUMER_SECRET).toString('base64');
-    const tokenRes = await axios.get(DARAJA_URL + "/oauth/v1/generate?grant_type=client_credentials", {
-      headers: { Authorization: "Basic " + auth }
-    });
-    const token = tokenRes.data.access_token;
-    const regRes = await axios.post(DARAJA_URL + "/mpesa/c2b/v1/registerurl", {
-      ShortCode: SHORTCODE,
-      ResponseType: "Completed",
-      ConfirmationURL: CONFIRMATION_URL,
-      ValidationURL: VALIDATION_URL
-    }, {
-      headers: { Authorization: "Bearer " + token }
-    });
-    res.json(regRes.data);
-  } catch (e) {
-    res.status(500).json({ error: e.response?.data || e.message });
-  }
-});
-
-module.exports = app;
+module.exports=app;
