@@ -37,7 +37,9 @@ app.get('/api/register', async (req, res) => {
       ResponseType: "Completed",
       ConfirmationURL: CONFIRMATION_URL,
       ValidationURL: VALIDATION_URL
-    }, { headers: { Authorization: "Bearer " + token } });
+    }, {
+      headers: { Authorization: "Bearer " + token }
+    });
     res.json(regRes.data);
   } catch (e) {
     res.status(500).json({ error: e.response?.data || e.message });
