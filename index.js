@@ -9,8 +9,8 @@ const CONFIRMATION_URL = BASE_URL + "/api/confirmation";
 const VALIDATION_URL = BASE_URL + "/api/validation";
 const DARAJA_URL = "https://api.safaricom.co.ke";
 
-const CONSUMER_KEY = "7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF;
-const CONSUMER_SECRET = "6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we";
+const CONSUMER_KEY = "6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we;
+const CONSUMER_SECRET = "7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF";
 
 app.get('/', (req, res) => {
   res.send('STARLIFE M-Pesa Backend Running - Ready!');
