@@ -3,38 +3,50 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// --- YOUR LIVE LINKS - NO MPESA WORD ---
 const BASE_URL = "https://starlifec2b.vercel.app";
-const CONFIRMATION_URL = `${BASE_URL}/api/confirmation`;
-const VALIDATION_URL = `${BASE_URL}/api/validation`;
-
-// --- YOUR BUSINESS DETAILS ---
+const CONFIRMATION_URL = BASE_URL + "/api/confirmation";
+const VALIDATION_URL = BASE_URL + "/api/validation";
 const SHORTCODE = "7148888";
-const CONSUMER_KEY = "YOUR_CONSUMER_KEY_HERE";
-const CONSUMER_SECRET = "YOUR_CONSUMER_SECRET_HERE";
 
-// Daraja URL - Production
+// --- PUT YOUR REAL DARAJA KEYS HERE ---
+const CONSUMER_KEY = "iE37H4u1Y0QvGgJbX9lK8pF2A6bC5dE7";
+const CONSUMER_SECRET = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV";
+
 const DARAJA_URL = "https://api.safaricom.co.ke";
 
-// Home route
 app.get('/', (req, res) => {
   res.send('STARLIFE M-Pesa Backend Running - Ready!');
 });
 
-// Validation - Safaricom calls this first
 app.post('/api/validation', (req, res) => {
-  console.log('Validation:', req.body);
   res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
-// Confirmation - Safaricom sends payment here
 app.post('/api/confirmation', (req, res) => {
-  console.log('Confirmation:', req.body);
-  // TODO: Save to your database
+  console.log(req.body);
   res.json({ ResultCode: 0, ResultDesc: "Success" });
 });
 
-// REGISTER - Call this to register URLs with Safaricom
 app.get('/api/register', async (req, res) => {
   try {
-   
+    const auth = Buffer.from(CONSUMER_KEY + ":" + CONSUMER_SECRET).toString('base64');
+    const tokenRes = await axios.get(DARAJA_URL + "/oauth/v1/generate?grant_type=client_credentials", {
+      headers: { Authorization: "Basic " + auth }
+    });
+    const token = tokenRes.data.access_token;
+    const reg = await axios.post(DARAJA_URL + "/mpesa/c2b/v1/registerurl",
+      {
+        ShortCode: SHORTCODE,
+        ResponseType: "Completed",
+        ConfirmationURL: CONFIRMATION_URL,
+        ValidationURL: VALIDATION_URL
+      },
+      { headers: { Authorization: "Bearer " + token } }
+    );
+    res.json(reg.data);
+  } catch (e) {
+    res.status(400).json(e.response ? e.response.data : { error: e.message });
+  }
+});
+
+module.exports = app;
