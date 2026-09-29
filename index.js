@@ -1,1 +1,78 @@
-const express=require('express');const axios=require('axios');const app=express();app.use(express.json());const B="https://starlife-mpesa-backend.vercel.app";const D="https://sandbox.safaricom.co.ke";const K="7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF";const S="6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we";app.get('/',(r,s)=>s.send('STARLIFE Paybill 714777 Account 440200282954 Ready!'));app.post('/api/validation',(r,s)=>{const a=r.body.BillRefNumber;if(a=="440200282954")s.json({ResultCode:0,ResultDesc:"Accepted"});else s.json({ResultCode:1,ResultDesc:"Invalid"});});app.post('/api/confirmation',(r,s)=>{console.log(r.body);s.json({ResultCode:0,ResultDesc:"Success"});});app.get('/api/register',async(r,s)=>{try{const auth=Buffer.from(K+":"+S).toString('base64');const tk=await axios.get(D+"/oauth/v1/generate?grant_type=client_credentials",{headers:{Authorization:"Basic "+auth}});const reg=await axios.post(D+"/mpesa/c2b/v1/registerurl",{ShortCode:600998,ResponseType:"Completed",ConfirmationURL:B+"/api/confirmation",ValidationURL:B+"/api/validation"},{headers:{Authorization:"Bearer "+tk.data.access_token}});s.json(reg.data);}catch(e){s.json({safaricom_error:e.response?.data,status:e.response?.status,msg:e.message});}});module.exports=app;
+const express = require('express');
+const app = express();
+app.use(express.json());
+
+function getEnv() {
+  return {
+    key: process.env.MPESA_CONSUMER_KEY,
+    secret: process.env.MPESA_CONSUMER_SECRET,
+    shortcode: process.env.MPESA_SHORTCODE || '600998',
+    env: (process.env.MPESA_ENV || 'sandbox').toLowerCase()
+  };
+}
+
+async function getToken(key, secret, baseUrl) {
+  const auth = Buffer.from(`${key}:${secret}`).toString('base64');
+  const r = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: { Authorization: `Basic ${auth}` }
+  });
+  const data = await r.json();
+  if (!data.access_token) throw new Error(JSON.stringify(data));
+  return data.access_token;
+}
+
+app.get("/", (req,res) => {
+  res.json({ status: "STARLIFE Running", urls: ["/api/register","/api/validation","/api/confirmation","/api/simulate"] });
+});
+
+app.get("/api/register", async (req,res) => {
+  try {
+    const { key, secret, shortcode, env } = getEnv();
+    if (!key || !secret) return res.status(400).json({ error: "Missing KEY/SECRET in Vercel Env Vars" });
+    const baseUrl = env === 'sandbox' ? 'https://sandbox.safaricom.co.ke' : 'https://api.safaricom.co.ke';
+    const token = await getToken(key, secret, baseUrl);
+    const host = req.headers.host;
+    const body = {
+      ShortCode: shortcode,
+      ResponseType: "Completed",
+      ConfirmationURL: `https://${host}/api/confirmation`,
+      ValidationURL: `https://${host}/api/validation`
+    };
+    const reg = await fetch(`${baseUrl}/mpesa/c2b/v1/registerurl`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const result = await reg.json();
+    return res.status(reg.status).json({ sent: body, result, token_ok: true });
+  } catch(e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/validation", (req,res) => {
+  console.log("VALIDATION", req.body);
+  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+});
+
+app.post("/api/confirmation", (req,res) => {
+  console.log("CONFIRMATION", req.body);
+  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+});
+
+app.get("/api/simulate", async (req,res) => {
+  try {
+    const { key, secret, shortcode } = getEnv();
+    const baseUrl = 'https://sandbox.safaricom.co.ke';
+    const token = await getToken(key, secret, baseUrl);
+    const sim = await fetch(`${baseUrl}/mpesa/c2b/v1/simulate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ShortCode: shortcode, CommandID: "CustomerPayBillOnline", Amount: "1", Msisdn: "254708374149", BillRefNumber: "TEST" })
+    });
+    const data = await sim.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = app;
