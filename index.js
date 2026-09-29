@@ -8,9 +8,9 @@ const CONFIRMATION_URL = BASE_URL + "/api/confirmation";
 const VALIDATION_URL = BASE_URL + "/api/validation";
 const SHORTCODE = "7148888";
 
-// --- PUT YOUR REAL DARAJA KEYS HERE ---
-const CONSUMER_KEY = "iE37H4u1Y0QvGgJbX9lK8pF2A6bC5dE7";
-const CONSUMER_SECRET = "aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV";
+// --- YOUR REAL DARAJA LIVE KEYS - READY ---
+const CONSUMER_KEY = "6Vy70jQRqGv3lGP68qItn4yKbL5UOuxHImcgNgh4s9KKHCrMAY1o0AA3Mjtcf0we";
+const CONSUMER_SECRET = "7dV44d1vPw1g3EXEGGJlKNbQ4Q6VudTU9RyFoi2AEnqf0ZPF";
 
 const DARAJA_URL = "https://api.safaricom.co.ke";
 
@@ -19,11 +19,13 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/validation', (req, res) => {
+  console.log('Validation:', req.body);
   res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
 app.post('/api/confirmation', (req, res) => {
-  console.log(req.body);
+  console.log('Confirmation:', req.body);
+  // Save to DB here later
   res.json({ ResultCode: 0, ResultDesc: "Success" });
 });
 
