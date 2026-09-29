@@ -17,12 +17,11 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/validation', (req, res) => {
-  console.log("Validation:", req.body);
   res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
 app.post('/api/confirmation', (req, res) => {
-  console.log("PAYMENT RECEIVED:", JSON.stringify(req.body));
+  console.log(req.body);
   res.json({ ResultCode: 0, ResultDesc: "Success" });
 });
 
@@ -37,4 +36,12 @@ app.get('/api/register', async (req, res) => {
       ShortCode: SHORTCODE,
       ResponseType: "Completed",
       ConfirmationURL: CONFIRMATION_URL,
-      ValidationURL:
+      ValidationURL: VALIDATION_URL
+    }, { headers: { Authorization: "Bearer " + token } });
+    res.json(regRes.data);
+  } catch (e) {
+    res.status(500).json({ error: e.response?.data || e.message });
+  }
+});
+
+module.exports = app;
