@@ -1,78 +1,72 @@
 const express = require('express');
 const app = express();
 app.use(express.json());
+app.use((req,res,next)=>{res.header('Access-Control-Allow-Origin','*');res.header('Access-Control-Allow-Methods','*');res.header('Access-Control-Allow-Headers','*');next();});
 
-function getEnv() {
+const BIN_URL = "https://api.npoint.io/b798a9decc5699e74b52";
+
+function getEnv(){
   return {
     key: process.env.MPESA_CONSUMER_KEY,
     secret: process.env.MPESA_CONSUMER_SECRET,
-    shortcode: process.env.MPESA_SHORTCODE || '600998',
-    env: (process.env.MPESA_ENV || 'sandbox').toLowerCase()
+    shortcode: process.env.MPESA_SHORTCODE,
+    env: (process.env.MPESA_ENV || 'sandbox')
   };
 }
 
-async function getToken(key, secret, baseUrl) {
-  const auth = Buffer.from(`${key}:${secret}`).toString('base64');
-  const r = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${auth}` }
-  });
-  const data = await r.json();
-  if (!data.access_token) throw new Error(JSON.stringify(data));
-  return data.access_token;
+async function getDB(){
+  const r = await fetch(BIN_URL);
+  return await r.json();
+}
+async function saveDB(data){
+  await fetch(BIN_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
 }
 
-app.get("/", (req,res) => {
-  res.json({ status: "STARLIFE Running", urls: ["/api/register","/api/validation","/api/confirmation","/api/simulate"] });
+// Get all pending and approved for admin
+app.get('/api/payments', async (req,res)=>{
+  try{
+    const db = await getDB();
+    res.json(db);
+  }catch(e){res.status(500).json({error:e.message})}
 });
 
-app.get("/api/register", async (req,res) => {
-  try {
-    const { key, secret, shortcode, env } = getEnv();
-    if (!key || !secret) return res.status(400).json({ error: "Missing KEY/SECRET in Vercel Env Vars" });
-    const baseUrl = env === 'sandbox' ? 'https://sandbox.safaricom.co.ke' : 'https://api.safaricom.co.ke';
-    const token = await getToken(key, secret, baseUrl);
-    const host = req.headers.host;
-    const body = {
-      ShortCode: shortcode,
-      ResponseType: "Completed",
-      ConfirmationURL: `https://${host}/api/confirmation`,
-      ValidationURL: `https://${host}/api/validation`
-    };
-    const reg = await fetch(`${baseUrl}/mpesa/c2b/v1/registerurl`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const result = await reg.json();
-    return res.status(reg.status).json({ sent: body, result, token_ok: true });
-  } catch(e) {
-    return res.status(500).json({ error: e.message });
-  }
+// When user submits payment manually
+app.post('/api/submit', async (req,res)=>{
+  const {name, phone, code} = req.body;
+  const db = await getDB();
+  db.pending.push({name, phone, code, time:new Date().toLocaleString()});
+  await saveDB(db);
+  res.json({success:true});
 });
 
-app.post("/api/validation", (req,res) => {
-  console.log("VALIDATION", req.body);
-  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+// Approve
+app.post('/api/approve', async (req,res)=>{
+  const {index} = req.body;
+  const db = await getDB();
+  const user = db.pending.splice(index,1)[0];
+  if(user){ db.approved.push(user); await saveDB(db); }
+  res.json({success:true, user});
 });
 
-app.post("/api/confirmation", (req,res) => {
-  console.log("CONFIRMATION", req.body);
-  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+// Reject
+app.post('/api/reject', async (req,res)=>{
+  const {index} = req.body;
+  const db = await getDB();
+  db.pending.splice(index,1);
+  await saveDB(db);
+  res.json({success:true});
 });
 
-app.get("/api/simulate", async (req,res) => {
-  try {
-    const { key, secret, shortcode } = getEnv();
-    const baseUrl = 'https://sandbox.safaricom.co.ke';
-    const token = await getToken(key, secret, baseUrl);
-    const sim = await fetch(`${baseUrl}/mpesa/c2b/v1/simulate`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ShortCode: shortcode, CommandID: "CustomerPayBillOnline", Amount: "1", Msisdn: "254708374149", BillRefNumber: "TEST" })
-    });
-    const data = await sim.json();
-    res.json(data);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+// Mpesa STK callback - auto add to pending
+app.post('/api/callback', async (req,res)=>{
+  try{
+    const db = await getDB();
+    db.pending.push({name:"Mpesa User", phone:req.body?.Body?.stkCallback?.CheckoutRequestID || "Unknown", code:JSON.stringify(req.body).slice(0,100), time:new Date().toLocaleString()});
+    await saveDB(db);
+  }catch(e){}
+  res.json({ResultCode:0});
 });
+
+app.get('/', (req,res)=> res.send('STARLIFE Backend Running - DB: '+BIN_URL));
 
 module.exports = app;
