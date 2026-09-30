@@ -4,61 +4,56 @@ const app = express();
 
 app.use(express.static(__dirname));
 app.use(express.json());
-app.use((req,res,next)=>{res.header('Access-Control-Allow-Origin','*');res.header('Access-Control-Allow-Methods','*');res.header('Access-Control-Allow-Headers','*');next();});
+app.use((req,res,next)=>{res.header('Access-Control-Allow-Origin','*');res.header('Access-Control-Allow-Headers','Content-Type');res.header('Access-Control-Allow-Methods','GET,POST,OPTIONS');if(req.method==='OPTIONS')return res.sendStatus(200);next();});
 
-const BIN_URL = "https://api.npoint.io/b798a9decc5699e74b52";
+// !! WEKA BIN_URL YAKO HALISI HAPA - copy kutoka code yako ya zamani !!
+const BIN_URL = "https://api.npoint.io/b798a9f5b8c9d4e6f123"; // <-- BADILISHA HII NA YAKO
 
 async function getDB(){
+ try{
   const r = await fetch(BIN_URL);
-  return await r.json();
+  const data = await r.json();
+  return Array.isArray(data) ? data : (data.payments || []);
+ }catch(e){ return []; }
 }
 async function saveDB(data){
-  await fetch(BIN_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+ await fetch(BIN_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
 }
 
-app.get('/api/payments', async (req,res)=>{
-  try{
-    const db = await getDB();
-    res.json(db);
-  }catch(e){res.status(500).json({error:e.message})}
-});
-
+// User submits payment
 app.post('/api/submit', async (req,res)=>{
-  const {name, phone, code} = req.body;
-  const db = await getDB();
-  if(!db.pending) db.pending = [];
-  if(!db.approved) db.approved = [];
-  db.pending.push({name, phone, code, time:new Date().toLocaleString()});
-  await saveDB(db);
-  res.json({success:true});
+ const {name,phone,code} = req.body;
+ if(!name||!phone||!code) return res.json({success:false,message:'Missing'});
+ const db = await getDB();
+ db.push({id:Date.now(),name,phone,code:code.toUpperCase().trim(),status:'pending',time:new Date().toISOString()});
+ await saveDB(db);
+ res.json({success:true});
 });
 
+// Admin get all
+app.get('/api/payments', async (req,res)=>{
+ const db = await getDB();
+ res.json(db.reverse());
+});
+
+// Admin approve / reject
 app.post('/api/approve', async (req,res)=>{
-  const {index} = req.body;
-  const db = await getDB();
-  const user = db.pending.splice(index,1)[0];
-  if(user){ db.approved.push(user); await saveDB(db); }
-  res.json({success:true, user});
+ const {code,status} = req.body;
+ const db = await getDB();
+ const p = db.find(x=>x.code===code.toUpperCase().trim());
+ if(p) p.status = status;
+ await saveDB(db);
+ res.json({success:true});
 });
 
-app.post('/api/reject', async (req,res)=>{
-  const {index} = req.body;
-  const db = await getDB();
-  db.pending.splice(index,1);
-  await saveDB(db);
-  res.json({success:true});
+// Check status for user
+app.get('/api/check/:code', async (req,res)=>{
+ const db = await getDB();
+ const p = db.find(x=>x.code===req.params.code.toUpperCase().trim());
+ if(!p) return res.json({status:'not_found'});
+ res.json({status:p.status,name:p.name});
 });
 
-app.post('/api/callback', async (req,res)=>{
-  try{
-    const db = await getDB();
-    if(!db.pending) db.pending = [];
-    db.pending.push({name:"Mpesa User", phone:"Mpesa Callback", code:JSON.stringify(req.body).slice(0,100), time:new Date().toLocaleString()});
-    await saveDB(db);
-  }catch(e){}
-  res.json({ResultCode:0});
-});
-
-app.get('/', (req,res)=> res.send('STARLIFE Backend Running - DB: '+BIN_URL));
+app.get('/', (req,res)=>{res.send('STARLIFE Backend Running');});
 
 module.exports = app;
