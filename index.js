@@ -1,18 +1,12 @@
 const express = require('express');
+const path = require('path');
 const app = express();
+
+app.use(express.static(__dirname));
 app.use(express.json());
 app.use((req,res,next)=>{res.header('Access-Control-Allow-Origin','*');res.header('Access-Control-Allow-Methods','*');res.header('Access-Control-Allow-Headers','*');next();});
 
 const BIN_URL = "https://api.npoint.io/b798a9decc5699e74b52";
-
-function getEnv(){
-  return {
-    key: process.env.MPESA_CONSUMER_KEY,
-    secret: process.env.MPESA_CONSUMER_SECRET,
-    shortcode: process.env.MPESA_SHORTCODE,
-    env: (process.env.MPESA_ENV || 'sandbox')
-  };
-}
 
 async function getDB(){
   const r = await fetch(BIN_URL);
@@ -22,7 +16,6 @@ async function saveDB(data){
   await fetch(BIN_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
 }
 
-// Get all pending and approved for admin
 app.get('/api/payments', async (req,res)=>{
   try{
     const db = await getDB();
@@ -30,16 +23,16 @@ app.get('/api/payments', async (req,res)=>{
   }catch(e){res.status(500).json({error:e.message})}
 });
 
-// When user submits payment manually
 app.post('/api/submit', async (req,res)=>{
   const {name, phone, code} = req.body;
   const db = await getDB();
+  if(!db.pending) db.pending = [];
+  if(!db.approved) db.approved = [];
   db.pending.push({name, phone, code, time:new Date().toLocaleString()});
   await saveDB(db);
   res.json({success:true});
 });
 
-// Approve
 app.post('/api/approve', async (req,res)=>{
   const {index} = req.body;
   const db = await getDB();
@@ -48,7 +41,6 @@ app.post('/api/approve', async (req,res)=>{
   res.json({success:true, user});
 });
 
-// Reject
 app.post('/api/reject', async (req,res)=>{
   const {index} = req.body;
   const db = await getDB();
@@ -57,11 +49,11 @@ app.post('/api/reject', async (req,res)=>{
   res.json({success:true});
 });
 
-// Mpesa STK callback - auto add to pending
 app.post('/api/callback', async (req,res)=>{
   try{
     const db = await getDB();
-    db.pending.push({name:"Mpesa User", phone:req.body?.Body?.stkCallback?.CheckoutRequestID || "Unknown", code:JSON.stringify(req.body).slice(0,100), time:new Date().toLocaleString()});
+    if(!db.pending) db.pending = [];
+    db.pending.push({name:"Mpesa User", phone:"Mpesa Callback", code:JSON.stringify(req.body).slice(0,100), time:new Date().toLocaleString()});
     await saveDB(db);
   }catch(e){}
   res.json({ResultCode:0});
